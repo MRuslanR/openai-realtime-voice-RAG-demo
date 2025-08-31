@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>AI.Voice — База знаний</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <script src="js/notifications.js" defer></script>
+</head>
+<body>
+    <div class="app-container">
+        <header class="app-header">
+            <div class="logo">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.477 2 2 6.477 2 12C2 17.523 6.477 22 12 22C17.523 22 22 17.523 22 12C22 6.477 17.523 2 12 2ZM12 4C16.418 4 20 7.582 20 12C20 13.821 19.347 15.49 18.257 16.804C17.06 14.53 14.73 13 12 13C9.27 13 6.94 14.53 5.743 16.804C4.653 15.49 4 13.821 4 12C4 7.582 7.582 4 12 4ZM12 15C14.761 15 17.067 16.613 18.064 18.913C16.54 19.599 14.82 20 13 20H11C9.18 20 7.46 19.599 5.936 18.913C6.933 16.613 9.239 15 12 15Z" fill="#3A76F5"/></svg>
+                <h1>AI.Voice</h1>
+            </div>
+            <nav class="navigation">
+                <a href="agent.html" class="nav-link">Агент</a>
+                <a href="knowledge.html" class="nav-link active">База знаний</a>
+                <button onclick="logout()" class="btn btn-danger" style="margin-left: 1rem;">Выйти</button>
+            </nav>
+        </header>
+
+        <main class="kb-page">
+            <div class="kb-grid">
+                <!-- Секция загрузки -->
+                <section class="card">
+                    <div class="card-header">
+                        <h3>Загрузка документов</h3>
+                    </div>
+                    <div class="card-body">
+                        <div id="drop-zone">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="drop-zone-icon"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                            <p><strong>Перетащите файлы сюда</strong> или нажмите для выбора</p>
+                            <p class="hint">Поддерживаются: .txt, .md, .pdf, .docx, .rtf, .csv, .json, .pptx</p>
+                            <p class="small-hint">Максимальный размер файла — 15 МБ.</p>
+                        </div>
+                        <input type="file" id="file-input" multiple>
+
+                        <div id="selected-files-list"></div>
+
+                        <div id="upload-controls">
+                            <button type="button" id="upload-button" class="btn btn-primary" disabled>Загрузить и проиндексировать</button>
+                        </div>
+                        <div id="upload-status" class="status-log"></div>
+                    </div>
+                </section>
+
+                <!-- Секция проиндексированных файлов -->
+                <section class="card">
+                    <div class="card-header">
+                        <h3>Проиндексированные файлы</h3>
+                        <button id="reset-kb-button" class="btn btn-danger-outline" title="Очистить базу знаний">Очистить всё</button>
+                    </div>
+                    <div class="card-body">
+                        <ul id="indexed-files-ul" class="file-list">
+                            <!-- Список файлов будет здесь -->
+                        </ul>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Секция поиска -->
+            <section class="card">
+                <div class="card-header">
+                    <h3>Тестовый поиск по базе знаний (RAG)</h3>
+                </div>
+                <div class="card-body">
+                    <form id="query-form" class="query-form">
+                        <input type="text" id="query-input" placeholder="Введите ваш вопрос для поиска релевантных фрагментов...">
+                        <button type="submit" id="query-button" class="btn btn-secondary">Найти</button>
+                    </form>
+                    <div id="query-results" class="query-results-container">
+                        <p class="hint">Здесь появятся результаты поиска.</p>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+      // --- Элементы UI ---
+      const $dropZone = document.getElementById('drop-zone'), $fileInput = document.getElementById('file-input');
+      const $uploadButton = document.getElementById('upload-button'), $uploadStatus = document.getElementById('upload-status');
+      const $selectedFilesList = document.getElementById('selected-files-list');
+      const $indexedFilesUl = document.getElementById('indexed-files-ul'), $resetKbButton = document.getElementById('reset-kb-button');
+      const $queryForm = document.getElementById('query-form'), $queryInput = document.getElementById('query-input');
+      const $queryButton = document.getElementById('query-button'), $queryResults = document.getElementById('query-results');
+
+      let selectedFiles = [];
+
+      // Настройки приёма файлов
+      const ALLOWED_EXT = new Set(['.txt','.md','.pdf','.docx','.rtf','.csv','.json','.pptx']);
+      const MAX_FILE_MB = 15;
+
+      function extOf(name) {
+        const i = name.lastIndexOf('.');
+        return i >= 0 ? name.slice(i).toLowerCase() : '';
+      }
+
+      // --- Логика Базы Знаний ---
+      async function fetchAndDisplayFiles() {
+        try {
+          $indexedFilesUl.innerHTML = '<li class="file-item hint">Обновление...</li>';
+          const response = await fetch('/files');
+          
+          if (!response.ok) {
+            if (response.status === 401) {
+              // Пользователь не авторизован - перенаправляем на логин
+              window.location.href = '/login';
+              return;
+            }
+            throw new Error(`Ошибка сервера: ${response.status}`);
+          }
+          
+          const files = await response.json();
+          $indexedFilesUl.innerHTML = '';
+          
+          // Проверяем, что получили массив, а не объект с ошибкой
+          if (files && files.error) {
+            throw new Error(files.error);
+          }
+          
+          if (!Array.isArray(files) || files.length === 0) {
+            $indexedFilesUl.innerHTML = '<li class="file-item hint">База знаний пуста.</li>';
+          } else {
+            files.forEach(file => {
+              const li = document.createElement('li');
+              li.className = 'file-item';
+              li.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg> <span>${file}</span>`;
+              $indexedFilesUl.appendChild(li);
+            });
+          }
+        } catch (error) {
+          console.error('Ошибка загрузки файлов:', error);
+          $indexedFilesUl.innerHTML = `<li class="file-item err">Ошибка загрузки: ${error.message}</li>`;
+          
+          // Показываем тост с ошибкой
+          if (typeof notifications !== 'undefined') {
+            notifications.error(`Не удалось загрузить список файлов: ${error.message}`, 'Ошибка');
+          }
+        }
+      }
+
+      function renderSelectedFiles() {
+          if (selectedFiles.length === 0) {
+              $selectedFilesList.innerHTML = '';
+              $uploadButton.disabled = true;
+              return;
+          }
+          let html = '<strong>Выбранные файлы:</strong><ul class="selected-files">';
+          selectedFiles.forEach((file, index) => {
+              html += `<li class="file-item-selected">
+                          <span>${file.name} (${(file.size / 1024).toFixed(1)} KB)</span>
+                          <button class="btn-remove-file" data-index="${index}" title="Удалить">&times;</button>
+                       </li>`;
+          });
+          html += '</ul>';
+          $selectedFilesList.innerHTML = html;
+          $uploadButton.disabled = false;
+      }
+
+      function handleFileSelection(files) {
+        const arr = Array.from(files);
+        let newAccepted = [];
+        let rejectedMessages = [];
+
+        for (const f of arr) {
+          const ext = extOf(f.name);
+          const tooBig = f.size > MAX_FILE_MB * 1024 * 1024;
+          if (!ALLOWED_EXT.has(ext) || tooBig) {
+            rejectedMessages.push(`${f.name} — ${!ALLOWED_EXT.has(ext) ? 'неподдерживаемый формат' : 'слишком большой'}`);
+          } else {
+            // Проверка на дубликаты
+            if (!selectedFiles.some(sf => sf.name === f.name && sf.size === f.size)) {
+                newAccepted.push(f);
+            }
+          }
+        }
+
+        selectedFiles = [...selectedFiles, ...newAccepted];
+        renderSelectedFiles();
+
+        if (rejectedMessages.length > 0) {
+            $uploadStatus.innerHTML = `<div class="status-message warn"><strong>Отклонено:</strong><br>${rejectedMessages.join('<br>')}</div>`;
+        } else {
+            $uploadStatus.innerHTML = '';
+        }
+      }
+
+      async function handleUpload() {
+        if (selectedFiles.length === 0) return;
+        $uploadButton.disabled = true;
+        $uploadButton.textContent = 'Загрузка...';
+        $uploadStatus.innerHTML = '<div class="status-message info">Загрузка и индексация файлов...</div>';
+
+        const formData = new FormData();
+        for (const file of selectedFiles) { formData.append('files', file); }
+
+        try {
+          const response = await fetch('/upload', { method: 'POST', body: formData });
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.error || 'Ошибка сервера');
+
+          let statusHtml = `<div class="status-message ok">${result.message}</div>`;
+          if (result.warnings && result.warnings.length) {
+            statusHtml += `<div class="status-message warn"><strong>Предупреждения:</strong><br>${result.warnings.join('<br>')}</div>`;
+          }
+          $uploadStatus.innerHTML = statusHtml;
+
+          selectedFiles = []; // Очистка после успешной загрузки
+          renderSelectedFiles();
+          await fetchAndDisplayFiles();
+        } catch (error) {
+          $uploadStatus.innerHTML = `<div class="status-message err">Ошибка: ${error.message}</div>`;
+        } finally {
+          $uploadButton.disabled = selectedFiles.length === 0;
+          $uploadButton.textContent = 'Загрузить и проиндексировать';
+        }
+      }
+
+      async function handleResetKnowledgeBase() {
+        if (!confirm('Вы уверены, что хотите полностью очистить базу знаний? Это действие необратимо.')) return;
+        try {
+          const response = await fetch('/reset-knowledge-base', { method: 'DELETE' });
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.error);
+          alert(result.message);
+          await fetchAndDisplayFiles();
+        } catch (error) {
+          alert('Не удалось очистить базу знаний: ' + error.message);
+        }
+      }
+
+      async function handleQuerySearch(event) {
+        event.preventDefault();
+        const queryText = $queryInput.value.trim();
+        if (!queryText) {
+          $queryResults.innerHTML = '<p class="err">Пожалуйста, введите запрос.</p>';
+          return;
+        }
+        $queryButton.disabled = true;
+        $queryButton.textContent = 'Поиск...';
+        $queryResults.innerHTML = '<div class="loader"></div>';
+        try {
+          const response = await fetch('/query', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: queryText, n_results: 3 })
+          });
+          if (!response.ok) {
+            const errorResult = await response.json();
+            throw new Error(errorResult.error || 'Ошибка сервера');
+          }
+          const results = await response.json();
+          $queryResults.innerHTML = '';
+          if (!Array.isArray(results) || results.length === 0) {
+            $queryResults.innerHTML = '<p class="hint">Ничего не найдено. Попробуйте другой запрос.</p>';
+            return;
+          }
+          results.forEach(result => {
+            const resultEl = document.createElement('div');
+            resultEl.className = 'result-chunk';
+            const similarity = Math.max(0, (1 - result.distance / 1.5) * 100).toFixed(1);
+            resultEl.innerHTML = `
+              <div class="result-chunk-content">
+                  <blockquote>${result.document.replace(/\n/g, '<br>')}</blockquote>
+              </div>
+              <div class="result-chunk-meta">
+                <span><strong>Источник:</strong> ${result.metadata.filename}</span>
+                <span class="similarity-badge" style="--similarity: ${similarity}%">Сходство: ${similarity}%</span>
+              </div>
+            `;
+            $queryResults.appendChild(resultEl);
+          });
+        } catch (error) {
+          $queryResults.innerHTML = `<p class="err">Ошибка поиска: ${error.message}</p>`;
+        } finally {
+          $queryButton.disabled = false;
+          $queryButton.textContent = 'Найти';
+        }
+      }
+
+      // --- Настройка Drag-and-Drop и кнопок ---
+      $dropZone.addEventListener('click', () => $fileInput.click());
+      $fileInput.addEventListener('change', () => handleFileSelection($fileInput.files));
+      ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => { $dropZone.addEventListener(eventName, e => { e.preventDefault(); e.stopPropagation(); }); });
+      ['dragenter', 'dragover'].forEach(eventName => { $dropZone.addEventListener(eventName, () => $dropZone.classList.add('dragover')); });
+      ['dragleave', 'drop'].forEach(eventName => { $dropZone.addEventListener(eventName, () => $dropZone.classList.remove('dragover')); });
+      $dropZone.addEventListener('drop', (e) => handleFileSelection(e.dataTransfer.files));
+
+      $selectedFilesList.addEventListener('click', (e) => {
+        if (e.target.classList.contains('btn-remove-file')) {
+            const index = parseInt(e.target.dataset.index, 10);
+            selectedFiles.splice(index, 1);
+            renderSelectedFiles();
+        }
+      });
+
+      // Проверяем авторизацию пользователя
+      function checkAuth() {
+        const user = localStorage.getItem('user');
+        if (!user) {
+          window.location.href = '/login';
+          return false;
+        }
+        return true;
+      }
+
+      // Выход из системы
+      function logout() {
+        localStorage.removeItem('user');
+        fetch('/logout', { method: 'POST' });
+        window.location.href = '/login';
+      }
+
+      document.addEventListener('DOMContentLoaded', () => {
+        if (!checkAuth()) return;
+        fetchAndDisplayFiles();
+      });
+      $uploadButton.addEventListener('click', handleUpload);
+      $resetKbButton.addEventListener('click', handleResetKnowledgeBase);
+      $queryForm.addEventListener('submit', handleQuerySearch);
+    </script>
+</body>
+</html>

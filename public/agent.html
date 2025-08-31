@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>AI.Voice — Агент</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <script src="js/notifications.js" defer></script>
+</head>
+<body>
+    <div class="app-container">
+        <header class="app-header">
+            <div class="logo">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.477 2 2 6.477 2 12C2 17.523 6.477 22 12 22C17.523 22 22 17.523 22 12C22 6.477 17.523 2 12 2ZM12 4C16.418 4 20 7.582 20 12C20 13.821 19.347 15.49 18.257 16.804C17.06 14.53 14.73 13 12 13C9.27 13 6.94 14.53 5.743 16.804C4.653 15.49 4 13.821 4 12C4 7.582 7.582 4 12 4ZM12 15C14.761 15 17.067 16.613 18.064 18.913C16.54 19.599 14.82 20 13 20H11C9.18 20 7.46 19.599 5.936 18.913C6.933 16.613 9.239 15 12 15Z" fill="#3A76F5"/></svg>
+                <h1>AI.Voice</h1>
+            </div>
+            <nav class="navigation">
+                <a href="agent.html" class="nav-link active">Агент</a>
+                <a href="knowledge.html" class="nav-link">База знаний</a>
+                <button onclick="logout()" class="btn btn-danger" style="margin-left: 1rem;">Выйти</button>
+            </nav>
+        </header>
+
+        <main class="chat-page">
+            <div class="chat-container">
+                <div class="chat-header">
+                    <h2>Диалог с ассистентом</h2>
+                    <div class="connection-controls">
+                        <div id="status-indicator" class="status-indicator disconnected" title="Отключено"></div>
+                        <button id="connect" class="btn btn-primary">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line></svg>
+                            <span>Начать сессию</span>
+                        </button>
+                        <button id="disconnect" class="btn btn-danger" disabled>
+                           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
+                            <span>Завершить</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="chat-log-wrapper">
+                    <div class="chat-log" id="log">
+                        <div class="message message--system">
+                            <div class="message-icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                            </div>
+                            <div class="message-content">
+                                <p>Добро пожаловать в AI.Voice! Нажмите <strong>"Начать сессию"</strong>, чтобы подключиться к ассистенту. Для работы с документами сначала загрузите их в <a href="knowledge.html">Базе знаний</a>.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                 <!-- Скрытый аудио-плеер -->
+                <audio id="remote" autoplay></audio>
+            </div>
+        </main>
+    </div>
+
+    <script>
+      // --- Элементы UI ---
+      const $log = document.getElementById('log');
+      const $remote = document.getElementById('remote');
+      const $connect = document.getElementById('connect');
+      const $disconnect = document.getElementById('disconnect');
+      const $statusIndicator = document.getElementById('status-indicator');
+
+      let pc, dc, localStream;
+
+      // --- Инициализация логгера ---
+      let logger;
+      document.addEventListener('DOMContentLoaded', () => {
+        logger = new UserLogger('log');
+      });
+
+      // --- Улучшенная функция логирования ---
+      function logMessage(text, type = 'system', details = '') {
+        if (logger) {
+          logger.log(text, type, details);
+          
+          // Также показываем важные сообщения как тосты
+          if (typeof notifications !== 'undefined') {
+            if (type === 'error') {
+              notifications.error(text, null, 8000);
+            } else if (type === 'success' && (text.includes('установлено') || text.includes('создана'))) {
+              notifications.success(text, null, 3000);
+            } else if (type === 'function-call') {
+              notifications.info(text, 'Поиск в документах', 2000);
+            }
+          }
+          return;
+        }
+        
+        // Fallback для старой системы (если logger не готов)
+          const messageEl = document.createElement('div');
+          messageEl.classList.add('message', `message--${type}`);
+
+          let iconSvg = '';
+          switch(type) {
+              case 'system':
+                  iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>`;
+                  break;
+              case 'success':
+                  iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>`;
+                  break;
+              case 'error':
+                  iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>`;
+                  break;
+              case 'function-call':
+                  iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>`;
+                  break;
+               case 'info':
+                  iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path><path d="M22 12A10 10 0 0 0 12 2v10z"></path></svg>`;
+                  break;
+          }
+
+          messageEl.innerHTML = `
+              <div class="message-icon">${iconSvg}</div>
+              <div class="message-content">
+                  <p>${text}</p>
+                  ${details ? `<pre class="message-details">${details}</pre>` : ''}
+              </div>
+          `;
+
+          $log.appendChild(messageEl);
+          // Плавная прокрутка к новому сообщению
+          $log.parentElement.scrollTop = $log.parentElement.scrollHeight;
+      }
+
+      function updateStatus(status) {
+          $statusIndicator.className = `status-indicator ${status}`;
+          const titles = {
+            'connected': 'Подключено',
+            'connecting': 'Подключение...',
+            'disconnected': 'Отключено',
+            'error': 'Ошибка подключения'
+          };
+          $statusIndicator.title = titles[status] || 'Неизвестный статус';
+      }
+
+      // --- WebRTC + Function Calling ---
+      function sendEvent(event) {
+        try {
+          if (!dc || dc.readyState !== 'open') throw new Error('dataChannel не готов');
+          dc.send(JSON.stringify(event));
+        } catch (e) {
+          logMessage('Не удалось отправить событие на сервер', 'error', e.message);
+        }
+      }
+
+      function sessionUpdateWithTools() {
+        const event = {
+          type: "session.update",
+          session: {
+            instructions: "Отвечай по-русски, дружелюбно и кратко. Если вопрос относится к документам пользователя, обязательно зови функцию kb_search и используй найденные фрагменты в ответе с цитатами (укажи файл).",
+            tools: [
+              {
+                type: "function",
+                name: "kb_search",
+                description: "Поиск по локальной базе знаний (ChromaDB) и возврат релевантных фрагментов текста.",
+                parameters: {
+                  type: "object",
+                  properties: {
+                    query: { type: "string", description: "Естественно-языковой запрос пользователя (на русском)." },
+                    n_results: { type: "integer", description: "Сколько фрагментов вернуть (1-10). По умолчанию 3.", minimum: 1, maximum: 10 }
+                  },
+                  required: ["query"]
+                }
+              }
+            ],
+            tool_choice: "auto"
+          }
+        };
+        sendEvent(event);
+        logMessage('Сессия обновлена: зарегистрированы инструменты для работы с базой знаний.', 'success');
+      }
+
+      async function handleFunctionCallOutput(item) {
+        try {
+          const args = JSON.parse(item.arguments || "{}");
+          if (item.name === 'kb_search') {
+            const query = String(args.query || '').trim();
+            const n = Math.min(Math.max(parseInt(args.n_results || 3, 10), 1), 10);
+            if (!query) throw new Error('Аргумент query пустой');
+
+            logMessage('Вызов функции поиска по базе знаний...', 'function-call', `Запрос: "${query}" (top ${n})`);
+
+            const resp = await fetch('/query', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ query, n_results: n })
+            });
+
+            if (!resp.ok) {
+              const t = await resp.text();
+              throw new Error(`/query вернул ${resp.status}: ${t}`);
+            }
+            const data = await resp.json();
+            const results = (Array.isArray(data) ? data : []).map(r => ({
+              text: r.document,
+              filename: r?.metadata?.filename || 'unknown',
+              distance: r?.distance
+            }));
+
+            sendEvent({
+              type: "conversation.item.create",
+              item: { type: "function_call_output", call_id: item.call_id, output: JSON.stringify({ results }) }
+            });
+            sendEvent({ type: "response.create" });
+            logMessage(`Результаты поиска (${results.length} фрагментов) отправлены модели для генерации ответа.`, 'success');
+          } else {
+            // ... (обработка других функций, если они появятся)
+          }
+        } catch (e) {
+          logMessage('Ошибка обработки вызова функции', 'error', e.message);
+          try {
+            sendEvent({
+              type: "conversation.item.create",
+              item: { type: "function_call_output", call_id: item.call_id, output: JSON.stringify({ error: e.message }) }
+            });
+            sendEvent({ type: "response.create" });
+          } catch {}
+        }
+      }
+
+      function handleServerEvent(raw) {
+        let serverEvent;
+        try { serverEvent = JSON.parse(raw); } catch { return; }
+
+        switch (serverEvent.type) {
+          case 'session.created':
+            logMessage('Сессия успешно создана.', 'success');
+            sessionUpdateWithTools();
+            break;
+          case 'session.updated':
+             // Можно не логировать, чтобы не засорять чат
+            break;
+          case 'response.done':
+            try {
+              const out = serverEvent?.response?.output || [];
+              const calls = out.filter(i => i?.type === 'function_call');
+              if (calls.length > 0) {
+                (async () => { for (const item of calls) await handleFunctionCallOutput(item); })();
+              }
+            } catch (e) {
+              logMessage('Ошибка парсинга ответа сервера', 'error', e.message);
+            }
+            break;
+          case 'error':
+          case 'invalid_request_error':
+            logMessage('Ошибка от OpenAI Realtime', 'error', serverEvent.message || JSON.stringify(serverEvent));
+            updateStatus('error');
+            break;
+        }
+      }
+
+      async function start() {
+        $connect.disabled = true;
+        $connect.querySelector('span').textContent = 'Подключение...';
+        updateStatus('connecting');
+
+        try {
+          localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          logMessage('Микрофон активирован.', 'info');
+
+          const tokenResp = await fetch('/session');
+          if (!tokenResp.ok) {
+            const errorData = await tokenResp.json().catch(() => ({ error: 'Ошибка сервера' }));
+            throw new Error(`Ошибка получения токена (${tokenResp.status}): ${errorData.error}`);
+          }
+          const tokenJson = await tokenResp.json();
+          if (!tokenJson.client_secret) {
+            throw new Error('Сервер не вернул client_secret: ' + JSON.stringify(tokenJson));
+          }
+
+          pc = new RTCPeerConnection();
+          pc.ontrack = (e) => { $remote.srcObject = e.streams[0]; logMessage('Аудиопоток от ассистента получен.', 'info'); };
+
+          dc = pc.createDataChannel('oai-events');
+          dc.onopen = () => logMessage('Канал для обмена данными открыт.', 'info');
+          dc.onclose = () => logMessage('Канал для обмена данными закрыт.', 'system');
+          dc.onerror = (e) => logMessage('Ошибка DataChannel', 'error', e.message);
+          dc.onmessage = (e) => handleServerEvent(e.data);
+
+          const [track] = localStream.getAudioTracks();
+          pc.addTrack(track, localStream);
+
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+
+          const resp = await fetch('https://api.openai.com/v1/realtime', {
+            method: 'POST', 
+            body: offer.sdp,
+            headers: { 
+              'Authorization': `Bearer ${tokenJson.client_secret}`, 
+              'Content-Type': 'application/sdp' 
+            }
+          });
+          
+          if (!resp.ok) {
+            const errorText = await resp.text().catch(() => 'Unknown error');
+            throw new Error(`OpenAI API ошибка (${resp.status}): ${errorText}`);
+          }
+          
+          const answer = await resp.text();
+          await pc.setRemoteDescription({ type: 'answer', sdp: answer });
+
+          logMessage('Соединение с ассистентом установлено. Можете начинать говорить.', 'success');
+          $disconnect.disabled = false;
+          updateStatus('connected');
+        } catch (err) {
+          console.error('Ошибка подключения:', err);
+          logMessage('Критическая ошибка при подключении.', 'error', err.message);
+          updateStatus('error');
+          await stop();
+        } finally {
+          $connect.disabled = false;
+          $connect.querySelector('span').textContent = 'Начать сессию';
+        }
+      }
+
+      async function stop() {
+        $disconnect.disabled = true;
+        try {
+          if (pc) {
+            try { if (dc) dc.close(); } catch {}
+            pc.getSenders().forEach(s => s.track && s.track.stop());
+            pc.getReceivers().forEach(r => r.track && r.track.stop());
+            pc.close();
+          }
+          if (localStream) localStream.getTracks().forEach(t => t.stop());
+          logMessage('Сессия завершена.', 'system');
+        } finally {
+          pc = undefined; dc = undefined; localStream = undefined;
+          $connect.disabled = false;
+          $disconnect.disabled = true;
+          updateStatus('disconnected');
+        }
+      }
+
+      // Проверяем авторизацию пользователя
+      function checkAuth() {
+        const user = localStorage.getItem('user');
+        if (!user) {
+          window.location.href = '/login';
+          return false;
+        }
+        return true;
+      }
+
+      // Выход из системы
+      function logout() {
+        localStorage.removeItem('user');
+        fetch('/logout', { method: 'POST' });
+        window.location.href = '/login';
+      }
+
+      // Проверяем авторизацию при загрузке страницы
+      document.addEventListener('DOMContentLoaded', () => {
+        if (!checkAuth()) return;
+      });
+
+      $connect.addEventListener('click', start);
+      $disconnect.addEventListener('click', stop);
+    </script>
+</body>
+</html>

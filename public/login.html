@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Вход в систему — OpenAI Realtime</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+      .login-page {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        background: linear-gradient(135deg, var(--light-blue) 0%, #ffffff 100%);
+      }
+
+      .login-container {
+        background-color: var(--card-background);
+        border-radius: var(--border-radius);
+        box-shadow: var(--card-shadow);
+        padding: 2.5rem;
+        width: 100%;
+        max-width: 400px;
+        text-align: center;
+      }
+
+      .login-header {
+        margin-bottom: 2rem;
+      }
+
+      .login-header h1 {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: var(--dark-blue);
+        margin-bottom: 0.5rem;
+      }
+
+      .login-header p {
+        color: var(--text-muted);
+        font-size: 0.95rem;
+      }
+
+      .login-form {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+      }
+
+      .form-group {
+        text-align: left;
+      }
+
+      .form-group label {
+        display: block;
+        margin-bottom: 0.5rem;
+        font-weight: 500;
+        color: var(--text-color);
+      }
+
+      .form-input {
+        width: 100%;
+        padding: 0.8rem 1rem;
+        border-radius: 8px;
+        border: 1px solid var(--border-color);
+        font-size: 1rem;
+        transition: border-color 0.2s;
+      }
+
+      .form-input:focus {
+        outline: none;
+        border-color: var(--primary-blue);
+        box-shadow: 0 0 0 2px rgba(58, 118, 245, 0.2);
+      }
+
+      .login-button {
+        width: 100%;
+        padding: 0.9rem;
+        font-size: 1rem;
+        font-weight: 600;
+      }
+
+      .error-message {
+        color: var(--error-color);
+        font-size: 0.9rem;
+        margin-top: 1rem;
+        padding: 0.75rem;
+        background-color: #fee2e2;
+        border-radius: 8px;
+        border: 1px solid #fca5a5;
+        text-align: center;
+      }
+
+      .demo-accounts {
+        margin-top: 2rem;
+        padding-top: 1.5rem;
+        border-top: 1px solid var(--border-color);
+      }
+
+      .demo-accounts h3 {
+        font-size: 0.9rem;
+        color: var(--text-muted);
+        margin-bottom: 0.75rem;
+      }
+
+      .demo-account-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.4rem 0.6rem;
+        background-color: #f8f9fa;
+        border-radius: 6px;
+        margin-bottom: 0.5rem;
+        font-size: 0.85rem;
+        color: var(--text-color);
+        cursor: pointer;
+        transition: background-color 0.2s;
+      }
+
+      .demo-account-item:hover {
+        background-color: #e9ecef;
+      }
+
+      .demo-account-item:last-child {
+        margin-bottom: 0;
+      }
+    </style>
+  </head>
+  <body class="login-page">
+    <div class="login-container">
+      <div class="login-header">
+        <h1>🔐 Вход в систему</h1>
+        <p>Введите логин и пароль для доступа</p>
+      </div>
+
+      <form class="login-form" id="loginForm">
+        <div class="form-group">
+          <label for="login">Логин</label>
+          <input type="text" id="login" name="login" class="form-input" required autocomplete="username">
+        </div>
+
+        <div class="form-group">
+          <label for="password">Пароль</label>
+          <input type="password" id="password" name="password" class="form-input" required autocomplete="current-password">
+        </div>
+
+        <button type="submit" class="btn btn-primary login-button" id="loginButton">
+          Войти
+        </button>
+      </form>
+
+      <div id="errorMessage" class="error-message" style="display: none;"></div>
+
+    </div>
+
+    <script>
+      const loginForm = document.getElementById('loginForm');
+      const loginButton = document.getElementById('loginButton');
+      const errorMessage = document.getElementById('errorMessage');
+      const loginInput = document.getElementById('login');
+      const passwordInput = document.getElementById('password');
+
+      function showError(message) {
+        errorMessage.textContent = message;
+        errorMessage.style.display = 'block';
+      }
+
+      function hideError() {
+        errorMessage.style.display = 'none';
+      }
+
+      loginForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        hideError();
+
+        const login = loginInput.value.trim();
+        const password = passwordInput.value.trim();
+
+        if (!login || !password) {
+          showError('Пожалуйста, заполните все поля');
+          return;
+        }
+
+        loginButton.disabled = true;
+        loginButton.textContent = 'Проверка...';
+
+        try {
+          const response = await fetch('/login', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ login, password })
+          });
+
+          const result = await response.json();
+
+          if (response.ok) {
+            // Успешная авторизация
+            localStorage.setItem('user', JSON.stringify(result.user));
+            window.location.href = '/';
+          } else {
+            // Ошибка авторизации
+            showError(result.error || 'Ошибка авторизации');
+          }
+        } catch (error) {
+          showError('Ошибка соединения с сервером');
+        } finally {
+          loginButton.disabled = false;
+          loginButton.textContent = 'Войти';
+        }
+      });
+
+      // Проверяем, не авторизован ли пользователь уже
+      document.addEventListener('DOMContentLoaded', () => {
+        const user = localStorage.getItem('user');
+        if (user) {
+          window.location.href = '/';
+        }
+      });
+    </script>
+  </body>
+</html>

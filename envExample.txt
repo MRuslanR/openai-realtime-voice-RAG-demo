@@ -1,0 +1,55 @@
+# OpenAI API Key
+OPENAI_API_KEY=sk-your-openai-api-key-here
+
+# Flask Configuration
+SECRET_KEY=your-very-secure-secret-key-for-production
+FLASK_ENV=development
+
+# Debug Mode (set to false in production)
+DEBUG=true
+
+# Server Configuration
+PORT=3000
+HOST=0.0.0.0
+
+# Database Configuration (if using external DB in future)
+# DATABASE_URL=postgresql://user:password@host:port/dbname
+
+# CORS Configuration (for production)
+# ALLOWED_ORIGINS=https://your-domain.com,https://www.your-domain.com
+
+# File Upload Configuration
+CHUNK_SIZE=1000
+CHUNK_OVERLAP=200
+MAX_UPLOAD_SIZE_MB=15
+ALLOWED_FILE_EXTENSIONS=txt,md,pdf,docx,rtf,csv,json,pptx
+
+# ChromaDB Configuration
+CHROMA_DB_PATH=chroma_db
+CHROMA_ANONYMIZED_TELEMETRY=false
+
+# Logging Configuration
+LOG_LEVEL=INFO
+LOG_FILE=app.log
+
+# OpenAI Configuration
+OPENAI_MODEL_EMBEDDING=text-embedding-3-small
+OPENAI_MODEL_REALTIME=gpt-realtime
+OPENAI_VOICE=marin
+OPENAI_MODALITIES=audio,text
+OPENAI_INSTRUCTIONS=Отвечай по-русски, дружелюбно и кратко. Если пользователя не слышно — вежливо попроси повторить.
+
+# Users Configuration
+USERS_FILE=users.json
+
+# Session Configuration
+OPENAI_API_BASE_URL=https://api.openai.com/v1
+REALTIME_SESSION_TIMEOUT=20
+
+# Query Configuration
+DEFAULT_N_RESULTS=3
+MAX_N_RESULTS=10
+MIN_N_RESULTS=1
+
+# Production CORS Origins (comma-separated)
+ALLOWED_ORIGINS=http://localhost:3000,https://your-domain.com
