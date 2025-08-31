@@ -51,7 +51,7 @@ Follow these instructions to get the project up and running on your local machin
 2.  **Configure Environment Variables**
     Create a `.env` file in the root of the project by copying the example:
     ```bash
-    cp .env.example .env
+    cp envExample.txt .env
     ```
     Now, open the `.env` file and add your credentials:
     ```ini
