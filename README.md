@@ -94,3 +94,7 @@ The application's RAG workflow is as follows:
 6.  **Vector Search**: The backend receives the query from the function call, embeds it, and performs a similarity search against the user's ChromaDB collection to find the most relevant text chunks.
 7.  **Context-Aware Response**: The retrieved chunks are sent back to the AI model as context. The model then synthesizes this information to generate an accurate, context-aware spoken response, often citing the source document.
 
+
+<img width="1725" height="974" alt="Снимок экрана 2025-09-01 в 20 56 48" src="https://github.com/user-attachments/assets/4a0e13e2-168d-48cb-a71d-6bf1e1c7595a" />
+<img width="1724" height="973" alt="Снимок экрана 2025-09-01 в 20 57 13" src="https://github.com/user-attachments/assets/926a894d-e502-4a36-8b1d-f425ab6d9a5b" />
+
